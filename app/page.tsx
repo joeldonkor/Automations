@@ -2,11 +2,12 @@
 
 import { useId, useState } from "react";
 import { parseRosterWorkbook } from "@/lib/parseRoster";
+import { parseAttendanceWorkbook } from "@/lib/parseAttendance";
 import { computeGroupTotals } from "@/lib/computeReport";
 import { buildWorkbook } from "@/lib/buildWorkbook";
 import { REPORT_ROWS, type GroupTotals } from "@/lib/types";
 
-const DEFAULT_INACTIVE_KEYWORDS = "BN,inactive,DF,DA,moved";
+const DEFAULT_IRREGULAR_KEYWORDS = "BN,irregular,DF,DA,moved";
 
 function labelFromFileName(name: string): string {
   return name.replace(/\.xlsx$/i, "");
@@ -51,11 +52,12 @@ export default function Home() {
 
   const [monthLabel, setMonthLabel] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [inactiveKeywords, setInactiveKeywords] = useState(DEFAULT_INACTIVE_KEYWORDS);
+  const [irregularKeywords, setIrregularKeywords] = useState(DEFAULT_IRREGULAR_KEYWORDS);
 
   const [includeAttendance, setIncludeAttendance] = useState(false);
   const [weekend, setWeekend] = useState(["", "", "", ""]);
   const [midweek, setMidweek] = useState(["", "", "", ""]);
+  const [attendanceFile, setAttendanceFile] = useState<File | null>(null);
 
   const [status, setStatus] = useState("");
   const [statusTone, setStatusTone] = useState<"idle" | "success" | "warning">("idle");
@@ -90,7 +92,7 @@ export default function Home() {
     setStatusTone("idle");
     setWarnings([]);
 
-    const keywords = inactiveKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+    const keywords = irregularKeywords.split(",").map((k) => k.trim()).filter(Boolean);
     const allWarnings: string[] = [];
     const totalsPerGroup: GroupTotals[] = [];
     const rawLabels: string[] = [];
@@ -101,6 +103,23 @@ export default function Home() {
       for (const group of groups) {
         rawLabels.push(group.label);
         totalsPerGroup.push(computeGroupTotals(group.rows));
+      }
+    }
+
+    if (attendanceFile) {
+      const parsedAttendance = await parseAttendanceWorkbook(attendanceFile);
+      allWarnings.push(...parsedAttendance.warnings);
+      if (parsedAttendance.weekend.length > 0) {
+        setWeekend(parsedAttendance.weekend.map((w) => String(w.attendance)));
+      }
+      if (parsedAttendance.midweek.length > 0) {
+        setMidweek(parsedAttendance.midweek.map((w) => String(w.attendance)));
+      }
+      if (parsedAttendance.weekend.length > 0 || parsedAttendance.midweek.length > 0) {
+        setIncludeAttendance(true);
+      }
+      if (parsedAttendance.monthLabel && !monthLabel) {
+        setMonthLabel(parsedAttendance.monthLabel);
       }
     }
 
@@ -278,41 +297,63 @@ export default function Home() {
           )}
         </section>
 
-        <details className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40 p-5 shadow-sm">
-          <summary className="font-medium cursor-pointer list-none flex items-center gap-2">
-            <svg viewBox="0 0 24 24" fill="none" className="size-4 text-zinc-400 transition-transform group-open:rotate-90">
-              <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Advanced settings
-          </summary>
-          <div className="mt-3 flex flex-col gap-3 pl-6">
-            <p className="text-zinc-500 text-sm">
-              A person counts as an <b>Auxiliary Pioneer</b> if the Aux. column has a mark; a{" "}
-              <b>Regular Pioneer</b> if Hours is filled in and Aux. is not marked; otherwise a regular
-              Publisher. Adjust the inactive keyword list below if your notes use different codes.
-            </p>
-            <label htmlFor={keywordsId} className="flex flex-col gap-1 text-sm max-w-md">
-              <span className="text-zinc-500">Inactive keyword(s) in Notes (comma separated)</span>
-              <input
-                id={keywordsId}
-                className="border border-zinc-300 dark:border-zinc-700 bg-transparent rounded-md px-3 py-2 transition-colors focus:border-cyan-600"
-                value={inactiveKeywords}
-                onChange={(e) => setInactiveKeywords(e.target.value)}
-              />
-            </label>
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40 p-5 flex flex-col gap-3 shadow-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-500">
+            Step 3 · Meeting attendance (optional)
+          </span>
 
-            <label htmlFor={attendanceId} className="flex items-center gap-2 text-sm mt-2">
-              <input
-                id={attendanceId}
-                type="checkbox"
-                checked={includeAttendance}
-                onChange={(e) => setIncludeAttendance(e.target.checked)}
-                className="size-4 accent-cyan-600"
-              />
-              <span>Include meeting attendance table</span>
-            </label>
+          <label htmlFor={attendanceId} className="flex items-center gap-2 text-sm">
+            <input
+              id={attendanceId}
+              type="checkbox"
+              checked={includeAttendance}
+              onChange={(e) => setIncludeAttendance(e.target.checked)}
+              className="size-4 accent-cyan-600"
+            />
+            <span>Include meeting attendance table</span>
+          </label>
 
-            {includeAttendance && (
+          {includeAttendance && (
+            <>
+              <p className="text-zinc-500 text-sm">
+                Upload a meeting attendance workbook (with &quot;Week&quot;/&quot;Attendance&quot; columns and
+                &quot;Midweek meeting&quot;/&quot;Weekend meeting&quot; sections) to auto-fill the weekly figures
+                below, or type them in by hand.
+              </p>
+
+              {attendanceFile ? (
+                <div className="flex items-center justify-between gap-3 text-sm rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-2 max-w-md">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <FileIcon />
+                    <span className="truncate">{labelFromFileName(attendanceFile.name)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceFile(null)}
+                    className="shrink-0 text-xs px-2 py-0.5 rounded-md border border-rose-300 text-rose-500 transition-colors hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-700 px-4 py-4 text-center cursor-pointer transition-colors hover:border-cyan-500 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/20 max-w-md">
+                  <span className="text-sm">
+                    <span className="font-medium text-cyan-700 dark:text-cyan-500">Click to browse</span>{" "}
+                    <span className="text-zinc-500">for an attendance .xlsx file</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setAttendanceFile(f);
+                      e.target.value = "";
+                    }}
+                    className="sr-only"
+                  />
+                </label>
+              )}
+
               <div className="grid grid-cols-2 gap-6 max-w-md">
                 <div className="flex flex-col gap-2">
                   <h3 className="text-sm font-medium">Weekend</h3>
@@ -343,7 +384,32 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-            )}
+            </>
+          )}
+        </section>
+
+        <details className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40 p-5 shadow-sm">
+          <summary className="font-medium cursor-pointer list-none flex items-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" className="size-4 text-zinc-400 transition-transform group-open:rotate-90">
+              <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Advanced settings
+          </summary>
+          <div className="mt-3 flex flex-col gap-3 pl-6">
+            <p className="text-zinc-500 text-sm">
+              A person counts as an <b>Auxiliary Pioneer</b> if the Aux. column has a mark; a{" "}
+              <b>Regular Pioneer</b> if Hours is filled in and Aux. is not marked; otherwise a regular
+              Publisher. Adjust the irregular keyword list below if your notes use different codes.
+            </p>
+            <label htmlFor={keywordsId} className="flex flex-col gap-1 text-sm max-w-md">
+              <span className="text-zinc-500">Irregular keyword(s) in Notes (comma separated)</span>
+              <input
+                id={keywordsId}
+                className="border border-zinc-300 dark:border-zinc-700 bg-transparent rounded-md px-3 py-2 transition-colors focus:border-cyan-600"
+                value={irregularKeywords}
+                onChange={(e) => setIrregularKeywords(e.target.value)}
+              />
+            </label>
           </div>
         </details>
 

@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { PublisherRow } from "./types";
+import { cellText, toNumber } from "./excelUtils";
 
 function isMarked(value: unknown): boolean {
   if (value === null || value === undefined) return false;
@@ -9,28 +10,6 @@ function isMarked(value: unknown): boolean {
   if (s === "") return false;
   if (["0", "no", "false", "n"].includes(s)) return false;
   return true;
-}
-
-function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") return value;
-  if (typeof value === "object" && value !== null && "result" in (value as Record<string, unknown>)) {
-    // ExcelJS formula cell result
-    return toNumber((value as { result: unknown }).result);
-  }
-  const n = Number(String(value).trim());
-  return Number.isFinite(n) ? n : null;
-}
-
-function cellText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object" && "text" in (value as Record<string, unknown>)) {
-    return String((value as { text: unknown }).text ?? "");
-  }
-  if (typeof value === "object" && "result" in (value as Record<string, unknown>)) {
-    return String((value as { result: unknown }).result ?? "");
-  }
-  return String(value);
 }
 
 const COLUMN_ALIASES: Record<string, string> = {
@@ -63,7 +42,7 @@ export type ParsedWorkbook = {
 
 function parseWorksheet(
   worksheet: ExcelJS.Worksheet,
-  inactiveKeywords: string[]
+  irregularKeywords: string[]
 ): PublisherRow[] | null {
   let headerRowNumber = -1;
   const columnMap: Record<number, string> = {};
@@ -97,7 +76,7 @@ function parseWorksheet(
   const notesCol = Object.entries(columnMap).find(([, v]) => v === "notes")?.[0];
 
   const rows: PublisherRow[] = [];
-  const keywordsLower = inactiveKeywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+  const keywordsLower = irregularKeywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
 
   for (let r = headerRowNumber + 1; r <= worksheet.rowCount; r++) {
     const row = worksheet.getRow(r);
@@ -127,13 +106,13 @@ function parseWorksheet(
     const hours = toNumber(hoursRaw);
     const notes = cellText(notesRaw).trim();
 
-    const inactive =
+    const irregular =
       keywordsLower.length > 0 &&
       keywordsLower.some((kw) => notes.toLowerCase().includes(kw));
 
     const category = isAux ? "auxPioneer" : hours !== null && hours > 0 ? "regularPioneer" : "publisher";
 
-    rows.push({ name, reported, bibleStudies, hours, notes, inactive, category });
+    rows.push({ name, reported, bibleStudies, hours, notes, irregular, category });
   }
 
   return rows;
@@ -151,7 +130,7 @@ function labelFromFileName(name: string): string {
  */
 export async function parseRosterWorkbook(
   file: File,
-  inactiveKeywords: string[]
+  irregularKeywords: string[]
 ): Promise<ParsedWorkbook> {
   const buffer = await file.arrayBuffer();
   const workbook = new ExcelJS.Workbook();
@@ -159,7 +138,7 @@ export async function parseRosterWorkbook(
 
   const found: ParsedGroup[] = [];
   for (const worksheet of workbook.worksheets) {
-    const rows = parseWorksheet(worksheet, inactiveKeywords);
+    const rows = parseWorksheet(worksheet, irregularKeywords);
     if (rows !== null) {
       found.push({ label: worksheet.name, rows });
     }

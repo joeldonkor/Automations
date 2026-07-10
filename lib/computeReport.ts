@@ -5,7 +5,7 @@ function sum(values: number[]): number {
 }
 
 export function computeGroupTotals(rows: PublisherRow[]): GroupTotals {
-  const active = rows.filter((r) => !r.inactive);
+  const active = rows.filter((r) => !r.irregular);
   const publishers = active.filter((r) => r.category === "publisher");
   const auxPioneers = active.filter((r) => r.category === "auxPioneer");
   const regularPioneers = active.filter((r) => r.category === "regularPioneer");
@@ -20,6 +20,6 @@ export function computeGroupTotals(rows: PublisherRow[]): GroupTotals {
     regularPioneers: regularPioneers.length,
     regularPioneerHours: sum(regularPioneers.map((r) => r.hours ?? 0)),
     regularBibleStudies: sum(regularPioneers.map((r) => r.bibleStudies)),
-    inactivePublishers: rows.length - active.length,
+    irregularPublishers: rows.length - active.length,
   };
 }

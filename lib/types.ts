@@ -6,7 +6,7 @@ export type PublisherRow = {
   bibleStudies: number;
   hours: number | null;
   notes: string;
-  inactive: boolean;
+  irregular: boolean;
   category: PublisherCategory;
 };
 
@@ -25,7 +25,7 @@ export type GroupTotals = {
   regularPioneers: number;
   regularPioneerHours: number;
   regularBibleStudies: number;
-  inactivePublishers: number;
+  irregularPublishers: number;
 };
 
 export const REPORT_ROWS: { label: string; key: keyof GroupTotals }[] = [
@@ -38,5 +38,5 @@ export const REPORT_ROWS: { label: string; key: keyof GroupTotals }[] = [
   { label: "Regular Pioneers", key: "regularPioneers" },
   { label: "Regular Pioneers Hours", key: "regularPioneerHours" },
   { label: "Regular Bible Studies", key: "regularBibleStudies" },
-  { label: "Inactive Publishers", key: "inactivePublishers" },
+  { label: "Irregular Publishers", key: "irregularPublishers" },
 ];

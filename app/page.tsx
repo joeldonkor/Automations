@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { parseRosterWorkbook } from "@/lib/parseRoster";
+import { parseRosterWorkbook, type ParsedGroup } from "@/lib/parseRoster";
 import { parseAttendanceWorkbook } from "@/lib/parseAttendance";
 import { computeGroupTotals } from "@/lib/computeReport";
 import { buildWorkbook } from "@/lib/buildWorkbook";
@@ -11,6 +11,32 @@ const DEFAULT_IRREGULAR_KEYWORDS = "BN,irregular,DF,DA,moved";
 
 function labelFromFileName(name: string): string {
   return name.replace(/\.xlsx$/i, "");
+}
+
+function checkFileTotals(group: ParsedGroup): string[] {
+  if (!group.fileTotals) return [];
+  const warnings: string[] = [];
+  const reportedAll = group.rows.filter((r) => r.reported).length;
+  const bibleStudiesAll = group.rows.reduce((sum, r) => sum + r.bibleStudies, 0);
+  const hoursAll = group.rows.reduce((sum, r) => sum + (r.hours ?? 0), 0);
+
+  const { reported, bibleStudies, hours } = group.fileTotals;
+  if (reported !== null && reported !== reportedAll) {
+    warnings.push(
+      `${group.label}: file's Total row shows ${reported} reported, but parsed rows total ${reportedAll} — check for missed or misread rows.`
+    );
+  }
+  if (bibleStudies !== null && bibleStudies !== bibleStudiesAll) {
+    warnings.push(
+      `${group.label}: file's Total row shows ${bibleStudies} Bible studies, but parsed rows total ${bibleStudiesAll}.`
+    );
+  }
+  if (hours !== null && hours !== hoursAll) {
+    warnings.push(
+      `${group.label}: file's Total row shows ${hours} hours, but parsed rows total ${hoursAll}.`
+    );
+  }
+  return warnings;
 }
 
 function dedupeLabels(labels: string[]): string[] {
@@ -103,6 +129,7 @@ export default function Home() {
       for (const group of groups) {
         rawLabels.push(group.label);
         totalsPerGroup.push(computeGroupTotals(group.rows));
+        allWarnings.push(...checkFileTotals(group));
       }
     }
 

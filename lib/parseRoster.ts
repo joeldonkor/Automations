@@ -30,9 +30,16 @@ const COLUMN_ALIASES: Record<string, string> = {
   remarks: "notes",
 };
 
+export type FileTotals = {
+  reported: number | null;
+  bibleStudies: number | null;
+  hours: number | null;
+};
+
 export type ParsedGroup = {
   label: string;
   rows: PublisherRow[];
+  fileTotals: FileTotals | null;
 };
 
 export type ParsedWorkbook = {
@@ -43,7 +50,7 @@ export type ParsedWorkbook = {
 function parseWorksheet(
   worksheet: ExcelJS.Worksheet,
   irregularKeywords: string[]
-): PublisherRow[] | null {
+): { rows: PublisherRow[]; fileTotals: FileTotals | null } | null {
   let headerRowNumber = -1;
   const columnMap: Record<number, string> = {};
 
@@ -76,6 +83,7 @@ function parseWorksheet(
   const notesCol = Object.entries(columnMap).find(([, v]) => v === "notes")?.[0];
 
   const rows: PublisherRow[] = [];
+  let fileTotals: FileTotals | null = null;
   const keywordsLower = irregularKeywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
 
   for (let r = headerRowNumber + 1; r <= worksheet.rowCount; r++) {
@@ -84,7 +92,14 @@ function parseWorksheet(
 
     const name = cellText(values[Number(nameCol)]).trim();
     if (!name) continue;
-    if (name.toLowerCase() === "total") break;
+    if (name.toLowerCase() === "total") {
+      fileTotals = {
+        reported: reportedCol ? toNumber(values[Number(reportedCol)]) : null,
+        bibleStudies: bibleStudiesCol ? toNumber(values[Number(bibleStudiesCol)]) : null,
+        hours: hoursCol ? toNumber(values[Number(hoursCol)]) : null,
+      };
+      break;
+    }
 
     const reportedRaw = reportedCol ? values[Number(reportedCol)] : undefined;
     const bibleStudiesRaw = bibleStudiesCol ? values[Number(bibleStudiesCol)] : undefined;
@@ -115,7 +130,7 @@ function parseWorksheet(
     rows.push({ name, reported, bibleStudies, hours, notes, irregular, category });
   }
 
-  return rows;
+  return { rows, fileTotals };
 }
 
 function labelFromFileName(name: string): string {
@@ -138,9 +153,9 @@ export async function parseRosterWorkbook(
 
   const found: ParsedGroup[] = [];
   for (const worksheet of workbook.worksheets) {
-    const rows = parseWorksheet(worksheet, irregularKeywords);
-    if (rows !== null) {
-      found.push({ label: worksheet.name, rows });
+    const parsed = parseWorksheet(worksheet, irregularKeywords);
+    if (parsed !== null) {
+      found.push({ label: worksheet.name, rows: parsed.rows, fileTotals: parsed.fileTotals });
     }
   }
 

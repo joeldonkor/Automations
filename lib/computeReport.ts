@@ -11,8 +11,10 @@ export function computeGroupTotals(rows: PublisherRow[]): GroupTotals {
   const regularPioneers = active.filter((r) => r.category === "regularPioneer");
 
   return {
-    activePublishers: active.length,
-    publishersReported: active.filter((r) => r.reported).length,
+    // Active publishers = Aux pioneers + Regular pioneers + Irregular publishers + Publishers,
+    // i.e. everyone on the roster — irregular ones are still active, just not reporting consistently.
+    activePublishers: rows.length,
+    publishersReported: publishers.filter((r) => r.reported).length,
     publisherBibleStudies: sum(publishers.map((r) => r.bibleStudies)),
     auxPioneers: auxPioneers.length,
     auxPioneerHours: sum(auxPioneers.map((r) => r.hours ?? 0)),
